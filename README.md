@@ -377,6 +377,11 @@ Additional documentation is available in the `docs/` directory:
 - [Contributing Guidelines](docs/CONTRIBUTING.md)
 - [API Documentation](http://localhost:8000/api/docs) (when server is running)
 
+## Credits
+
+**Developed by:** Yatharth Chauhan  
+**Contact:** contact@yatharthchauhan.me
+
 ## License
 
 This project is private and proprietary.
