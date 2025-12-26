@@ -4,14 +4,14 @@ A multi-agent orchestration platform built with FastAPI, React, and modern infra
 
 ## Features
 
-- 🤖 **Multi-Agent Management**: Register, manage, and orchestrate AI agents
-- 🧠 **Semantic Memory**: Store and search memories with vector embeddings
-- 💬 **Chat Interface**: Interactive chat interface with streaming responses
-- 📊 **Analytics Dashboard**: Real-time system analytics and monitoring
-- 🔍 **Vector Search**: Advanced semantic search using Qdrant
-- 💾 **File Storage**: Object storage with MinIO
-- 🚀 **FastAPI Backend**: High-performance async API
-- ⚛️ **React Frontend**: Modern UI with TypeScript and Tailwind CSS
+- **Multi-Agent Management**: Register, manage, and orchestrate AI agents
+- **Semantic Memory**: Store and search memories with vector embeddings
+- **Chat Interface**: Interactive chat interface with streaming responses
+- **Analytics Dashboard**: Real-time system analytics and monitoring
+- **Vector Search**: Advanced semantic search using Qdrant
+- **File Storage**: Object storage with MinIO
+- **FastAPI Backend**: High-performance async API
+- **React Frontend**: Modern UI with TypeScript and Tailwind CSS
 
 ## Tech Stack
 
@@ -142,10 +142,10 @@ docker-compose -f docker-compose.dev.yml up -d
 ```
 
 This starts:
-- ✅ **PostgreSQL** on port 5432
-- ✅ **Redis** on port 6379
-- ✅ **Qdrant** on port 6333
-- ✅ **MinIO** on ports 9000 (API) and 9001 (Console)
+- **PostgreSQL** on port 5432
+- **Redis** on port 6379
+- **Qdrant** on port 6333
+- **MinIO** on ports 9000 (API) and 9001 (Console)
 
 Verify services are running:
 ```bash
@@ -392,5 +392,5 @@ For issues and questions, please open an issue on GitHub or contact the developm
 
 ---
 
-**Happy Coding! 🚀**
+**Happy Coding!**
 
