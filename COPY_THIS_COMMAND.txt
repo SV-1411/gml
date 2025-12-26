@@ -1,0 +1,1 @@
+cd "/Volumes/Yatri Cloud/org/gml/project" && source venv/bin/activate && lsof -ti:8000 | xargs kill -9 2>/dev/null; sleep 2 && export PYTHONPATH="${PYTHONPATH}:$(pwd)/src" && uvicorn src.gml.api.main:app --reload --host 0.0.0.0 --port 8000

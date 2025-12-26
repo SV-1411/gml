@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gml-config
+data:
+  APP_NAME: "gml-infrastructure"
+  APP_ENV: "production"
+  LOG_LEVEL: "INFO"
+  REDIS_PORT: "6379"
+  RABBITMQ_PORT: "5672"
+  PROMETHEUS_PORT: "9090"
+  MAX_WORKERS: "4"
+  WORKER_TIMEOUT: "300"
+  API_V1_PREFIX: "/api/v1"
+  CORS_ORIGINS: "*"

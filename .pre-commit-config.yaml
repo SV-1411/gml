@@ -1,0 +1,121 @@
+# Pre-commit hooks configuration for GML Infrastructure
+# See https://pre-commit.com for more information
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(alembic/versions/.*\.py|\.md$)
+      - id: end-of-file-fixer
+        exclude: ^(alembic/versions/.*\.py)
+      - id: check-yaml
+        args: [--safe]
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: debug-statements
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # Black code formatter
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: [--line-length=100]
+        exclude: ^(alembic/versions/.*\.py|migrations/.*\.py)
+
+  # isort import sorting
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: [--profile=black, --line-length=100]
+        exclude: ^(alembic/versions/.*\.py|migrations/.*\.py)
+
+  # mypy type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [
+          types-redis,
+          types-pyyaml,
+          types-all,
+        ]
+        args: [
+          --ignore-missing-imports,
+          --python-version=3.11,
+          --warn-return-any,
+          --warn-unused-configs,
+          --disallow-untyped-defs,
+          --disallow-incomplete-defs,
+          --check-untyped-defs,
+          --no-implicit-optional,
+          --warn-redundant-casts,
+          --warn-unused-ignores,
+          --warn-no-return,
+        ]
+        exclude: ^(tests/|alembic/|examples/|migrations/)
+
+  # Pylint code linting
+  - repo: https://github.com/pycqa/pylint
+    rev: v3.3.1
+    hooks:
+      - id: pylint
+        args: [
+          --max-line-length=100,
+          --disable=C0111,  # missing-docstring
+          --disable=C0103,  # invalid-name
+          --disable=R0903,  # too-few-public-methods
+          --disable=R0913,  # too-many-arguments
+          --disable=R0912,  # too-many-branches
+          --disable=R0915,  # too-many-statements
+        ]
+        exclude: ^(tests/|alembic/|examples/|migrations/|venv/|\.venv/)
+
+  # Pytest unit tests
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        types: [python]
+        args: [
+          tests/unit/,
+          -v,
+          --tb=short,
+          --strict-markers,
+        ]
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
+        exclude: ^(alembic/|migrations/|venv/|\.venv/)
+
+# Default stages for hooks
+default_stages: [commit]
+
+# Exclude patterns for all hooks
+exclude: |
+  (?x)^(
+    alembic/versions/.*\.py$|  # Exclude auto-generated migration files
+    migrations/.*\.py$|        # Exclude migration files
+    venv/.*|                  # Exclude virtual environment
+    \.venv/.*|                # Exclude virtual environment
+    \.git/.*|                 # Exclude git directory
+    \.mypy_cache/.*|          # Exclude mypy cache
+    \.pytest_cache/.*|        # Exclude pytest cache
+    build/.*|                 # Exclude build directory
+    dist/.*|                  # Exclude dist directory
+    \.eggs/.*|                # Exclude eggs directory
+    node_modules/.*|          # Exclude node modules
+    \.coverage|               # Exclude coverage files
+    htmlcov/.*|               # Exclude coverage reports
+  )

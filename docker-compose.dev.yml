@@ -1,0 +1,187 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 15 Database - Optimized for M4 Mac (ARM64)
+  postgres:
+    image: postgres:15-alpine
+    container_name: gml-postgres
+    platform: linux/arm64/v8
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gml_db
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+      # Performance tuning for M4 Mac
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "work_mem=8MB"
+      - "-c"
+      - "maintenance_work_mem=64MB"
+      - "-c"
+      - "effective_cache_size=1GB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "default_statistics_target=100"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gml_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - gml-network
+
+  # Redis 7 Cache - Optimized for M4 Mac (ARM64)
+  redis:
+    image: redis:7-alpine
+    container_name: gml-redis
+    platform: linux/arm64/v8
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    environment:
+      # Redis configuration via environment variables (optional)
+      REDIS_MAXMEMORY: "512mb"
+      REDIS_MAXMEMORY_POLICY: "allkeys-lru"
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--appendfsync"
+      - "everysec"
+      - "--maxmemory"
+      - "512mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--save"
+      - "60 1000"
+      - "--tcp-backlog"
+      - "511"
+      - "--timeout"
+      - "300"
+      - "--tcp-keepalive"
+      - "60"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - gml-network
+
+  # Qdrant Vector Database - Optimized for M4 Mac (ARM64)
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: gml-qdrant
+    platform: linux/arm64/v8
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - qdrant_snapshots:/qdrant/snapshots
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+      QDRANT__SERVICE__HTTP_PORT: "6333"
+      # Performance optimizations for M4
+      QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS: "4"
+      QDRANT__STORAGE__PERFORMANCE__MAX_OPTIMIZATION_THREADS: "2"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:6333/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - gml-network
+
+  # MinIO S3 Compatible Storage - Optimized for M4 Mac (ARM64)
+  minio:
+    image: minio/minio:latest
+    container_name: gml-minio
+    platform: linux/arm64/v8
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_DOMAIN: localhost
+      MINIO_SERVER_URL: http://localhost:9000
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - gml-network
+
+  # MinIO Client - Auto-create default buckets
+  # Note: This is a one-time setup job, no healthcheck needed
+  minio-client:
+    image: minio/mc:latest
+    container_name: gml-minio-client
+    platform: linux/arm64/v8
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb myminio/uploads --ignore-existing;
+      /usr/bin/mc mb myminio/backups --ignore-existing;
+      /usr/bin/mc mb myminio/models --ignore-existing;
+      /usr/bin/mc anonymous set download myminio/uploads;
+      exit 0;
+      "
+    networks:
+      - gml-network
+    # No restart policy for one-time setup job
+    restart: "no"
+
+networks:
+  gml-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  qdrant_snapshots:
+    driver: local
+  minio_data:
+    driver: local

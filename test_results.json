@@ -1,0 +1,143 @@
+{
+  "summary": {
+    "passed": 22,
+    "failed": 0,
+    "skipped": 0,
+    "total": 22
+  },
+  "tests": [
+    {
+      "name": "Project structure",
+      "status": "PASS",
+      "message": "Running from project root",
+      "timestamp": "2025-12-21T00:54:09.749395"
+    },
+    {
+      "name": "Virtual environment",
+      "status": "PASS",
+      "message": "venv directory exists",
+      "timestamp": "2025-12-21T00:54:09.749407"
+    },
+    {
+      "name": "PostgreSQL container",
+      "status": "PASS",
+      "message": "Container is running",
+      "timestamp": "2025-12-21T00:54:09.795841"
+    },
+    {
+      "name": "Redis container",
+      "status": "PASS",
+      "message": "Container is running",
+      "timestamp": "2025-12-21T00:54:09.838426"
+    },
+    {
+      "name": "Qdrant container",
+      "status": "PASS",
+      "message": "Container is running",
+      "timestamp": "2025-12-21T00:54:09.878867"
+    },
+    {
+      "name": "MinIO container",
+      "status": "PASS",
+      "message": "Container is running",
+      "timestamp": "2025-12-21T00:54:09.916467"
+    },
+    {
+      "name": "PostgreSQL connection",
+      "status": "PASS",
+      "message": "Database accepting connections",
+      "timestamp": "2025-12-21T00:54:09.971746"
+    },
+    {
+      "name": "Redis connection",
+      "status": "PASS",
+      "message": "Redis responding to PING",
+      "timestamp": "2025-12-21T00:54:10.021730"
+    },
+    {
+      "name": "Qdrant HTTP endpoint",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.033705"
+    },
+    {
+      "name": "MinIO HTTP endpoint",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.035529"
+    },
+    {
+      "name": "Basic health endpoint",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.105895"
+    },
+    {
+      "name": "Detailed health endpoint",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.148319"
+    },
+    {
+      "name": "API documentation",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.149108"
+    },
+    {
+      "name": "OpenAPI schema",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.158637"
+    },
+    {
+      "name": "Agents list endpoint",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.169058"
+    },
+    {
+      "name": "Ollama health endpoint",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.180383"
+    },
+    {
+      "name": "Frontend homepage",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.185560"
+    },
+    {
+      "name": "Agent registration",
+      "status": "PASS",
+      "message": "HTTP 201",
+      "timestamp": "2025-12-21T00:54:10.248680"
+    },
+    {
+      "name": "Agent retrieval",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.252578"
+    },
+    {
+      "name": "Memory search",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.261800"
+    },
+    {
+      "name": "MinIO Console",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.268170"
+    },
+    {
+      "name": "Qdrant Dashboard",
+      "status": "PASS",
+      "message": "HTTP 200",
+      "timestamp": "2025-12-21T00:54:10.269945"
+    }
+  ],
+  "timestamp": "2025-12-21T00:54:10.270165"
+}

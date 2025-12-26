@@ -1,0 +1,323 @@
+# ============================================================================
+# PYTHON & ENVIRONMENT
+# ============================================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+ENV/
+env/
+.venv
+.env.venv
+bin/
+pyvenv.cfg
+site-packages/
+
+# Pipenv & Poetry
+Pipfile.lock
+poetry.lock
+.poetry.lock
+
+# ============================================================================
+# IDE & EDITOR
+# ============================================================================
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+.vscode/tasks.json
+
+# JetBrains IDEs (PyCharm, IntelliJ, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+.gradle/
+out/
+*.log
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.tmTheme.cache
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+.netrwhist
+tags
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Nano
+.nano_history
+
+# ============================================================================
+# TESTING & COVERAGE
+# ============================================================================
+
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.ruff_cache/
+
+# ============================================================================
+# DATABASE & LOCAL DATA
+# ============================================================================
+
+*.db
+*.sqlite
+*.sqlite3
+database.db
+local.db
+test.db
+instance/
+.coverage.json
+.bandit
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+
+logs/
+*.log
+*.log.*
+debug.log
+error.log
+access.log
+celery-beat-schedule
+celerybeat-schedule
+
+# ============================================================================
+# MAC OS SPECIFIC
+# ============================================================================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Icon
+.Icon
+.apdisk
+.DS_Store?
+*.swp
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+
+# ============================================================================
+# WINDOWS SPECIFIC
+# ============================================================================
+
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ============================================================================
+# LINUX SPECIFIC
+# ============================================================================
+
+.directory
+.Trash*
+
+# ============================================================================
+# ENVIRONMENT & SECRETS
+# ============================================================================
+
+.env
+.env.local
+.env.*.local
+.env.production.local
+.env.development.local
+.env.test.local
+.secrets/
+*.pem
+*.key
+*.cert
+.ssh/
+
+# ============================================================================
+# BUILD & DISTRIBUTION
+# ============================================================================
+
+build/
+dist/
+.PyInstaller/
+*.manifest
+*.spec
+*.whl
+*.tar.gz
+*.zip
+
+# ============================================================================
+# DOCKER & CONTAINER
+# ============================================================================
+
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# ============================================================================
+# NODE & FRONTEND (if applicable)
+# ============================================================================
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ============================================================================
+# MISC PROJECT FILES
+# ============================================================================
+
+.cache/
+.pytest/
+.venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+.webassets-cache
+instance/
+.scrapy
+docs/_build/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.typing/
+
+# ============================================================================
+# CELERY WORKER & BEAT SCHEDULER
+# ============================================================================
+
+celerybeat-schedule
+celerybeat.pid
+
+# ============================================================================
+# DATABASE MIGRATIONS
+# ============================================================================
+
+migrations/__pycache__/
+migrations/*.pyc
+alembic.ini.local
+
+# ============================================================================
+# OS GENERATED FILES
+# ============================================================================
+
+*.swp
+.svn/
+.git/
+.hg/
+
+# ============================================================================
+# TEMPORARY FILES
+# ============================================================================
+
+*.tmp
+*.bak
+*.orig
+*.rej
+*.patch
+*~
+.~*
+#*#
+
+# ============================================================================
+# MACOS SPECIFIC - DETAILED
+# ============================================================================
+
+# macOS system files
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.com.apple.timemachine.donotpresent
+
+# Xcode files (if using Xcode)
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcworkspace
+xcuserdata/
+
+# Finder
+.DS_Store
+.CFUserTextEncoding
+
+# ============================================================================
+# EDITOR PLUGINS & EXTENSIONS
+# ============================================================================
+
+.editorconfig.local
+.prettierignore
+.prettierrc.local
+.stylelintignore
+
+# ============================================================================
+# FASTAPI SPECIFIC
+# ============================================================================
+
+__pycache__/
+*.pyc
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+starlette_exceptionhandler_cache/
+asgi_middleware_cache/
+
+# ============================================================================
+# EXCLUDE TRACKED FILES
+# ============================================================================
+
+# Keep these files in repo (add ! to override ignore)
+!.gitkeep
+!.env.example
+!.gitignore

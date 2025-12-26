@@ -1,0 +1,129 @@
+# GML Infrastructure - macOS Setup Commands
+# Copy and paste these commands in sequence
+
+# ============================================================================
+# STEP 1: Create GitHub Repository (Manual Instructions)
+# ============================================================================
+# 1. Go to https://github.com/new
+# 2. Repository name: gml-infrastructure
+# 3. Description: Multi-Agent Orchestration Platform
+# 4. DO NOT initialize with README, .gitignore, or license
+# 5. Click "Create repository"
+# 6. Copy the repository URL (e.g., https://github.com/yourusername/gml-infrastructure.git)
+
+# ============================================================================
+# STEP 2: Clone Repository
+# ============================================================================
+cd ~/Projects
+git clone https://github.com/yourusername/gml-infrastructure.git
+cd gml-infrastructure
+
+# ============================================================================
+# STEP 3: Create Python Virtual Environment
+# ============================================================================
+python3 -m venv venv
+
+# ============================================================================
+# STEP 4: Activate Virtual Environment
+# ============================================================================
+source venv/bin/activate
+
+# ============================================================================
+# STEP 5: Install Dependencies
+# ============================================================================
+pip install --upgrade pip
+pip install -r requirements-dev.txt
+
+# ============================================================================
+# STEP 6: Create .env File
+# ============================================================================
+cat > .env << 'EOF'
+# Application
+ENVIRONMENT=development
+DEBUG=true
+APP_NAME=gml-infrastructure
+
+# Database
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/gml_db
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
+
+# Qdrant
+QDRANT_URL=http://localhost:6333
+QDRANT_API_KEY=
+
+# Security
+SECRET_KEY=dev-secret-key-change-in-production
+ALGORITHM=HS256
+JWT_EXPIRY_HOURS=24
+
+# AI/ML (optional for now)
+OPENAI_API_KEY=
+EMBEDDING_MODEL=text-embedding-3-small
+
+# Logging
+LOG_LEVEL=INFO
+EOF
+
+# ============================================================================
+# STEP 7: Start Docker Services
+# ============================================================================
+docker-compose -f docker-compose.dev.yml up -d
+
+# Wait for services to be healthy (check status)
+docker-compose -f docker-compose.dev.yml ps
+
+# ============================================================================
+# STEP 8: Initialize Database
+# ============================================================================
+# Verify database is ready
+docker exec gml-postgres pg_isready -U postgres
+
+# ============================================================================
+# STEP 9: Run Migrations
+# ============================================================================
+alembic upgrade head
+
+# ============================================================================
+# STEP 10: Start FastAPI Server
+# ============================================================================
+cd src
+python -m uvicorn gml.api.main:app --reload --host 0.0.0.0 --port 8000
+
+# Keep this terminal open. In a NEW terminal window, run Step 11
+
+# ============================================================================
+# STEP 11: Test Health Endpoint (in NEW terminal)
+# ============================================================================
+# Activate venv in new terminal first:
+cd ~/Projects/gml-infrastructure
+source venv/bin/activate
+
+# Test health endpoint
+curl http://localhost:8000/health
+
+# Test with pretty JSON
+curl -s http://localhost:8000/health | python3 -m json.tool
+
+# Test detailed health
+curl -s http://localhost:8000/api/v1/health/detailed | python3 -m json.tool
+
+# ============================================================================
+# VERIFICATION COMMANDS
+# ============================================================================
+# Check Docker services
+docker-compose -f docker-compose.dev.yml ps
+
+# Check database
+docker exec gml-postgres psql -U postgres -d gml_db -c "SELECT version();"
+
+# Check Redis
+docker exec gml-redis redis-cli ping
+
+# Check Qdrant
+curl http://localhost:6333/healthz
+
+# Open API docs in browser
+open http://localhost:8000/api/docs
+
