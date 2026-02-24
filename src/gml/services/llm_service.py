@@ -61,15 +61,24 @@ class LLMService:
         # Get model from settings with fallback
         if provider == "openai":
             self.model = model or getattr(settings, "OPENAI_MODEL", None) or "gpt-4"
+        elif provider == "openrouter":
+            self.model = model or getattr(settings, "OPENROUTER_MODEL", None) or "openai/gpt-4o-mini"
         elif provider == "ollama":
             self.model = model or getattr(settings, "OLLAMA_MODEL", None) or "llama2"
         else:
             self.model = model or "gpt-4"
-        self.api_key = api_key or settings.OPENAI_API_KEY
+
+        if provider == "openrouter":
+            self.api_key = api_key or getattr(settings, "OPENROUTER_API_KEY", "")
+        else:
+            self.api_key = api_key or settings.OPENAI_API_KEY
         
         # Initialize client based on provider
         if provider == "openai" and self.api_key and self.api_key.startswith("sk-"):
             self.client = AsyncOpenAI(api_key=self.api_key)
+        elif provider == "openrouter" and self.api_key and self.api_key.startswith("sk-"):
+            base_url = getattr(settings, "OPENROUTER_BASE_URL", None) or "https://openrouter.ai/api/v1"
+            self.client = AsyncOpenAI(api_key=self.api_key, base_url=base_url)
         else:
             self.client = None
             
@@ -96,7 +105,7 @@ class LLMService:
         Returns:
             Completion response or async generator for streaming
         """
-        if self.provider == "openai":
+        if self.provider in ("openai", "openrouter"):
             return await self._openai_completion(
                 messages=messages,
                 stream=stream,
@@ -126,7 +135,7 @@ class LLMService:
         """Generate completion using OpenAI."""
         if not self.client:
             # Fallback to Ollama
-            logger.warning("OpenAI client not available, falling back to Ollama")
+            logger.warning("LLM client not available, falling back to Ollama")
             return await self._ollama_completion(
                 messages=messages,
                 stream=stream,
@@ -215,6 +224,7 @@ class LLMService:
                                         yield data
                                     except json.JSONDecodeError:
                                         continue
+
                     return _stream_generator()
                 else:
                     response = await client.post(
@@ -239,42 +249,33 @@ class LLMService:
     async def stream_response(
         self, response: Any
     ) -> AsyncGenerator[str, None]:
-        """
-        Stream response chunks as text.
-
-        Args:
-            response: Streaming response object
-
-        Yields:
-            Text chunks
-        """
+        """Stream response chunks as text."""
         if isinstance(response, AsyncGenerator):
             # Ollama stream
             async for chunk in response:
                 if chunk.get("message", {}).get("content"):
                     yield chunk["message"]["content"]
         else:
-            # OpenAI stream
+            # OpenAI/OpenRouter stream
             async for chunk in response:
                 if chunk.choices and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
 
 
-# Singleton instance
 _llm_service: Optional[LLMService] = None
 
 
-async def get_llm_service(
-    provider: str = "openai",
-    model: Optional[str] = None,
-) -> LLMService:
-    """Get or create the singleton LLM service instance."""
+async def get_llm_service() -> LLMService:
     global _llm_service
 
-    if _llm_service is None:
-        _llm_service = LLMService(provider=provider, model=model)
-        logger.info("LLM service singleton created")
+    if _llm_service is not None:
+        return _llm_service
 
+    provider = getattr(settings, "LLM_PROVIDER", None) or "openai"
+    if getattr(settings, "USE_OLLAMA", False):
+        provider = "ollama"
+
+    _llm_service = LLMService(provider=provider)
     return _llm_service
 
 

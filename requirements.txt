@@ -13,6 +13,9 @@ pydantic-settings==2.5.0
 sqlalchemy>=2.0.40  # 2.0.27 incompatible with Python 3.13, using >=2.0.40
 asyncpg==0.30.0
 
+# Database migrations
+alembic==1.16.5
+
 # Vector Database
 qdrant-client==1.12.0
 

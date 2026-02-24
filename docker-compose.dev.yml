@@ -5,7 +5,6 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: gml-postgres
-    platform: linux/arm64/v8
     ports:
       - "5432:5432"
     environment:
@@ -53,7 +52,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: gml-redis
-    platform: linux/arm64/v8
     ports:
       - "6379:6379"
     volumes:
@@ -64,6 +62,8 @@ services:
       REDIS_MAXMEMORY_POLICY: "allkeys-lru"
     command:
       - "redis-server"
+      - "--ignore-warnings"
+      - "ARM64-COW-BUG"
       - "--appendonly"
       - "yes"
       - "--appendfsync"
@@ -94,7 +94,6 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     container_name: gml-qdrant
-    platform: linux/arm64/v8
     ports:
       - "6333:6333"
       - "6334:6334"
@@ -121,7 +120,6 @@ services:
   minio:
     image: minio/minio:latest
     container_name: gml-minio
-    platform: linux/arm64/v8
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -149,7 +147,6 @@ services:
   minio-client:
     image: minio/mc:latest
     container_name: gml-minio-client
-    platform: linux/arm64/v8
     depends_on:
       minio:
         condition: service_healthy

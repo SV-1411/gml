@@ -116,6 +116,32 @@ class Settings(BaseSettings):
         description="OpenAI API key for LLM and embedding operations",
     )
 
+    OPENAI_MODEL: str = Field(
+        default="gpt-4o-mini",
+        description="Default OpenAI model identifier",
+    )
+
+    LLM_PROVIDER: Literal["openai", "openrouter", "ollama"] = Field(
+        default="openai",
+        description="LLM provider selection",
+    )
+
+    # OpenRouter Configuration (OpenAI-compatible API)
+    OPENROUTER_API_KEY: str = Field(
+        default="",
+        description="OpenRouter API key for LLM operations",
+    )
+
+    OPENROUTER_BASE_URL: str = Field(
+        default="https://openrouter.ai/api/v1",
+        description="OpenRouter OpenAI-compatible base URL",
+    )
+
+    OPENROUTER_MODEL: str = Field(
+        default="openai/gpt-4o-mini",
+        description="Default OpenRouter model identifier",
+    )
+
     EMBEDDING_MODEL: str = Field(
         default="text-embedding-3-small",
         description="OpenAI embedding model identifier",
@@ -141,6 +167,13 @@ class Settings(BaseSettings):
         default=False,
         description="Use Ollama instead of OpenAI for LLM operations",
     )
+
+    @field_validator("OPENROUTER_API_KEY")
+    @classmethod
+    def validate_openrouter_key(cls, v: str) -> str:
+        if v and not v.startswith("sk-"):
+            logger.warning("OPENROUTER_API_KEY does not start with 'sk-'. Format may be invalid.")
+        return v
 
     # ============================================================================
     # LOGGING CONFIGURATION
