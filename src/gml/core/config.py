@@ -161,14 +161,14 @@ class Settings(BaseSettings):
     )
 
     LLM_PROVIDER: Literal["openai", "openrouter", "ollama"] = Field(
-        default="openai",
-        description="LLM provider selection",
+        default="openrouter",
+        description="LLM provider selection (openrouter is free-tier friendly)",
     )
 
-    # OpenRouter Configuration (OpenAI-compatible API)
+    # OpenRouter Configuration (OpenAI-compatible API) - PRIMARY
     OPENROUTER_API_KEY: str = Field(
         default="",
-        description="OpenRouter API key for LLM operations",
+        description="OpenRouter API key for LLM operations (PRIMARY)",
     )
 
     OPENROUTER_BASE_URL: str = Field(
@@ -177,8 +177,8 @@ class Settings(BaseSettings):
     )
 
     OPENROUTER_MODEL: str = Field(
-        default="openai/gpt-4o-mini",
-        description="Default OpenRouter model identifier",
+        default="meta-llama/llama-3.2-3b-instruct:free",
+        description="Default OpenRouter model (free tier available)",
     )
 
     EMBEDDING_MODEL: str = Field(
