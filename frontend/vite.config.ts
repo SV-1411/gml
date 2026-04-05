@@ -13,5 +13,26 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // Use Render backend in production
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    },
+  },
+  define: {
+    // API URLs for different environments
+    __API_URL__: JSON.stringify(
+      process.env.NODE_ENV === 'production' 
+        ? 'https://gml-yxf5.onrender.com'
+        : 'http://localhost:8000'
+    ),
+    __FRONTEND_URL__: JSON.stringify(
+      process.env.NODE_ENV === 'production'
+        ? 'https://gml-sand.vercel.app'
+        : 'http://localhost:3000'
+    ),
+  },
 })
 
