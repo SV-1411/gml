@@ -238,8 +238,8 @@ class Settings(BaseSettings):
     @field_validator("REDIS_URL")
     @classmethod
     def validate_redis_url(cls, v: str) -> str:
-        """Validate REDIS_URL format."""
-        if not v.startswith(("redis://", "rediss://")):
+        """Validate REDIS_URL format (or allow empty for optional mode)."""
+        if v and not v.startswith(("redis://", "rediss://")):
             raise ValueError("REDIS_URL must start with 'redis://' or 'rediss://'")
         return v
 
