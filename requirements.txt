@@ -47,6 +47,7 @@ pytz==2024.1
 
 # AI/ML Services
 openai>=1.0.0
+numpy==1.26.4
 
 # Form Data Support (Required for file uploads)
 python-multipart>=0.0.6
