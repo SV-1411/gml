@@ -36,7 +36,7 @@ interface MemoryVersionsProps {
 const MemoryVersions = ({ contextId, onClose }: MemoryVersionsProps) => {
   const [versions, setVersions] = useState<Version[]>([])
   const [loading, setLoading] = useState(false)
-  const [selectedVersion, setSelectedVersion] = useState<Version | null>(null)
+  const [, _setSelectedVersion] = useState<Version | null>(null)
   const [diffVersion1, setDiffVersion1] = useState<number | null>(null)
   const [diffVersion2, setDiffVersion2] = useState<number | null>(null)
   const [diff, setDiff] = useState<Diff | null>(null)

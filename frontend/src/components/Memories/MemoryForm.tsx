@@ -188,7 +188,7 @@ const MemoryForm: React.FC<MemoryFormProps> = ({ onClose, onSuccess }) => {
                   type="radio"
                   value="text"
                   checked={formData.contentType === 'text'}
-                  onChange={(e) => setFormData({ ...formData, contentType: 'text', content: '' })}
+                  onChange={() => setFormData({ ...formData, contentType: 'text', content: '' })}
                   className="text-primary-600"
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-300">Text</span>
@@ -198,7 +198,7 @@ const MemoryForm: React.FC<MemoryFormProps> = ({ onClose, onSuccess }) => {
                   type="radio"
                   value="json"
                   checked={formData.contentType === 'json'}
-                  onChange={(e) => setFormData({ ...formData, contentType: 'json', content: '' })}
+                  onChange={() => setFormData({ ...formData, contentType: 'json', content: '' })}
                   className="text-primary-600"
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-300">JSON</span>

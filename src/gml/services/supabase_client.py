@@ -26,7 +26,7 @@ Usage:
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from supabase import AsyncClient, create_async_client
+from supabase import create_client, Client
 from supabase.lib.client_options import ClientOptions
 
 from src.gml.core.config import get_settings
@@ -37,10 +37,10 @@ logger = logging.getLogger(__name__)
 # SINGLETON INSTANCE
 # ============================================================================
 
-_supabase_client: Optional[AsyncClient] = None
+_supabase_client: Optional[Client] = None
 
 
-async def get_supabase_client() -> AsyncClient:
+async def get_supabase_client() -> Client:
     """
     Get or create the singleton Supabase client instance.
 
@@ -61,8 +61,8 @@ async def get_supabase_client() -> AsyncClient:
                 "Set SUPABASE_URL and SUPABASE_SERVICE_KEY in environment."
             )
 
-        # Create async Supabase client
-        _supabase_client = await create_async_client(
+        # Create Supabase client (sync client used in async context)
+        _supabase_client = create_client(
             supabase_url=settings.SUPABASE_URL,
             supabase_key=settings.SUPABASE_SERVICE_KEY,
             options=ClientOptions(
@@ -103,7 +103,7 @@ class SupabaseDB:
     Provides a SQLAlchemy-like interface for compatibility with existing code.
     """
 
-    def __init__(self, client: AsyncClient):
+    def __init__(self, client: Client):
         self.client = client
 
     async def select(
