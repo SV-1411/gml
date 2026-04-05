@@ -713,26 +713,57 @@ class RedisClient:
 # ============================================================================
 
 _redis_client: Optional[RedisClient] = None
+_redis_available: bool = True  # Track if Redis is available
 
 
-async def get_redis_client() -> RedisClient:
+async def get_redis_client() -> Optional[RedisClient]:
     """
     Get or create the singleton Redis client instance.
 
+    Returns None if Redis is not configured (REDIS_URL empty) or connection fails,
+    allowing the application to run in degraded mode without caching.
+
     Returns:
-        RedisClient instance
+        RedisClient instance or None if unavailable
 
     Example:
         >>> redis_client = await get_redis_client()
-        >>> await redis_client.publish("channel", {"data": "test"})
+        >>> if redis_client:
+        >>>     await redis_client.publish("channel", {"data": "test"})
     """
-    global _redis_client
+    global _redis_client, _redis_available
+
+    # If Redis was previously determined to be unavailable, return None early
+    if not _redis_available:
+        return None
+
+    # Check if REDIS_URL is configured
+    if not settings.REDIS_URL or settings.REDIS_URL.strip() == "":
+        logger.info("Redis URL not configured, running without cache (degraded mode)")
+        _redis_available = False
+        return None
 
     if _redis_client is None:
         _redis_client = RedisClient()
-        await _redis_client.connect()
+        try:
+            await _redis_client.connect()
+        except RedisError as e:
+            logger.warning(f"Redis connection failed, running without cache: {str(e)}")
+            _redis_client = None
+            _redis_available = False
+            return None
 
     return _redis_client
+
+
+def is_redis_available() -> bool:
+    """
+    Check if Redis is available for use.
+
+    Returns:
+        True if Redis client is connected, False otherwise
+    """
+    return _redis_available and _redis_client is not None and _redis_client._is_connected
 
 
 async def close_redis_client() -> None:
@@ -756,6 +787,7 @@ __all__ = [
     "RedisClient",
     "get_redis_client",
     "close_redis_client",
+    "is_redis_available",
     "DEFAULT_MAX_RETRIES",
     "DEFAULT_RETRY_DELAY",
     "DEFAULT_BACKOFF_MULTIPLIER",

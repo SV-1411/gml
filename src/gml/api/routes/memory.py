@@ -1,8 +1,7 @@
 """
 Memory API Routes
 
-FastAPI router for memory management endpoints including writing,
-retrieval, and semantic search with proper error handling and access control.
+FastAPI router for memory management endpoints using Supabase.
 """
 
 import logging
@@ -11,9 +10,8 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.gml.api.dependencies import get_db
 from src.gml.api.schemas.memory import (
     DEFAULT_EMBEDDING_DIMENSION,
     MemoryResponse,
@@ -23,9 +21,7 @@ from src.gml.api.schemas.memory import (
     MemoryVisibility,
     MemoryWriteRequest,
 )
-from src.gml.db.database import get_db
-from src.gml.db.models import Agent, Memory
-from src.gml.services import CostService
+from src.gml.services.supabase_client import SupabaseDB
 
 logger = logging.getLogger(__name__)
 
@@ -35,88 +31,52 @@ router = APIRouter(prefix="/memory", tags=["memory"])
 async def get_current_agent_id(
     x_agent_id: Optional[str] = Header(None, alias="X-Agent-ID"),
 ) -> Optional[str]:
-    """
-    Get current agent ID from request headers.
-
-    This is a placeholder for authentication middleware.
-    In production, this should validate the agent's API token.
-
-    Args:
-        x_agent_id: Agent ID from X-Agent-ID header
-
-    Returns:
-        Agent ID if provided, None otherwise
-    """
+    """Get current agent ID from request headers."""
     return x_agent_id
 
 
 def check_memory_access(
-    memory: Memory, agent_id: Optional[str], agent_organization: Optional[str] = None
+    memory: dict, agent_id: Optional[str], agent_organization: Optional[str] = None
 ) -> bool:
     """
     Check if an agent has access to a memory.
-
+    
     Access control rules:
     - 'all': All agents can read
     - 'organization': Only agents in the same organization
     - 'private': Only the owning agent
     - readable_by list: Only agents in the list
-
-    Args:
-        memory: Memory instance to check
-        agent_id: ID of the agent requesting access
-        agent_organization: Organization of the requesting agent
-
-    Returns:
-        True if access is granted, False otherwise
     """
     if not agent_id:
         return False
 
     # Owner always has access
-    if memory.agent_id == agent_id:
+    if memory.get("agent_id") == agent_id:
         return True
 
     # Check visibility
-    if memory.visibility == "all":
+    visibility = memory.get("visibility", "private")
+    
+    if visibility == "all":
         return True
 
-    if memory.visibility == "organization":
-        # Get memory owner's organization
-        # For now, we'll need to query the agent
-        # In production, this should be optimized with joins
+    if visibility == "organization":
         if agent_organization:
-            # This would require querying the agent's organization
-            # Placeholder: assume same organization check
             return True  # TODO: Implement organization check
 
-    if memory.visibility == "private":
+    if visibility == "private":
         return False
 
     # Check readable_by list
-    if memory.readable_by:
-        readable_by_list = (
-            memory.readable_by if isinstance(memory.readable_by, list) else []
-        )
-        if agent_id in readable_by_list:
-            return True
+    readable_by = memory.get("readable_by", [])
+    if readable_by and agent_id in readable_by:
+        return True
 
     return False
 
 
 async def generate_embedding(content: dict, model: str = "text-embedding-3-small") -> List[float]:
-    """
-    Generate vector embedding for memory content.
-
-    Extracts text from content and generates embedding using the embedding service.
-
-    Args:
-        content: Memory content dictionary
-        model: Embedding model to use (not used, service handles this)
-
-    Returns:
-        List of floats representing the embedding vector
-    """
+    """Generate vector embedding for memory content."""
     from src.gml.services.embedding_service import get_embedding_service
 
     embedding_service = await get_embedding_service()
@@ -139,25 +99,10 @@ async def semantic_search(
     memory_type: Optional[str] = None,
     conversation_id: Optional[str] = None,
     limit: int = 10,
-    db: AsyncSession = None,
+    db: SupabaseDB = None,
     agent_id: Optional[str] = None,
-) -> List[tuple[Memory, float]]:
-    """
-    Perform semantic search on memories using vector similarity.
-
-    Uses Qdrant vector database for fast similarity search.
-
-    Args:
-        query_embedding: Query vector embedding
-        memory_type: Optional filter by memory type
-        conversation_id: Optional filter by conversation ID
-        limit: Maximum number of results
-        db: Database session (optional, used for fetching memory objects)
-        agent_id: Optional filter by agent ID
-
-    Returns:
-        List of tuples (Memory, similarity_score)
-    """
+) -> List[tuple[dict, float]]:
+    """Perform semantic search on memories using vector similarity."""
     from src.gml.services.memory_store import get_memory_store
 
     memory_store = await get_memory_store()
@@ -179,13 +124,9 @@ async def semantic_search(
     # Fetch full memory objects
     results = []
     for context_id, score, metadata in search_results:
-        memory_result = await db.execute(
-            select(Memory).where(Memory.context_id == context_id)
-        )
-        memory = memory_result.scalar_one_or_none()
-
-        if memory:
-            results.append((memory, score))
+        memories = await db.select("memories", filters={"context_id": context_id}, limit=1)
+        if memories:
+            results.append((memories[0], score))
 
     logger.debug(
         f"Semantic search completed: {len(results)} results for "
@@ -200,55 +141,13 @@ async def semantic_search(
     response_model=dict,
     status_code=status.HTTP_201_CREATED,
     summary="Write a new memory",
-    description="Create a new memory with embedding generation and access control",
 )
 async def write_memory(
     request: MemoryWriteRequest,
-    db: AsyncSession = Depends(get_db),
+    db: SupabaseDB = Depends(get_db),
     agent_id: Optional[str] = Depends(get_current_agent_id),
 ) -> dict:
-    """
-    Write a new memory.
-
-    Creates a new memory with:
-    - Generated context_id
-    - Vector embedding generation (stub)
-    - Access control settings
-    - Version tracking
-
-    Also records the memory write cost.
-
-    Args:
-        request: Memory write request with content and metadata
-        db: Database session (dependency injection)
-        agent_id: Current agent ID from headers
-
-    Returns:
-        Dictionary containing:
-            - context_id: Unique memory context identifier
-            - version: Memory version number
-
-    Raises:
-        HTTPException 401: If agent_id not provided
-        HTTPException 500: For server errors
-
-    Example:
-        POST /api/v1/memory/write
-        Headers: X-Agent-ID: agent-001
-        {
-            "conversation_id": "conv-xyz-456",
-            "content": {"text": "User prefers dark mode"},
-            "memory_type": "semantic",
-            "visibility": "all",
-            "tags": ["ui", "preference"]
-        }
-
-        Response 201:
-        {
-            "context_id": "ctx-abc-123",
-            "version": 1
-        }
-    """
+    """Write a new memory with embedding generation."""
     try:
         # Validate agent_id
         if not agent_id:
@@ -258,11 +157,8 @@ async def write_memory(
             )
 
         # Verify agent exists
-        agent_result = await db.execute(
-            select(Agent).where(Agent.agent_id == agent_id)
-        )
-        agent = agent_result.scalar_one_or_none()
-        if agent is None:
+        agents = await db.select("agents", filters={"agent_id": agent_id}, limit=1)
+        if not agents:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Agent '{agent_id}' not found",
@@ -277,7 +173,6 @@ async def write_memory(
 
         # Store embedding in Qdrant
         from src.gml.services.memory_store import get_memory_store
-        from src.gml.db.models import MemoryVector
 
         memory_store = await get_memory_store()
         await memory_store.ensure_collection()
@@ -294,74 +189,55 @@ async def write_memory(
         )
 
         # Store vector metadata in database
-        vector_metadata = MemoryVector(
-            context_id=context_id,
-            embedding_dimension=len(embedding),
-            embedding_model="text-embedding-3-small",  # Default model
-            is_indexed=True,
-            indexed_at=datetime.now(timezone.utc),
-        )
-        db.add(vector_metadata)
+        await db.insert("memory_vectors", {
+            "context_id": context_id,
+            "embedding_dimension": len(embedding),
+            "embedding_model": "text-embedding-3-small",
+            "is_indexed": True,
+            "indexed_at": datetime.now(timezone.utc).isoformat(),
+        })
 
         # Create memory in database
-        memory = Memory(
-            context_id=context_id,
-            agent_id=agent_id,
-            conversation_id=request.conversation_id,
-            content=request.content,
-            memory_type=request.memory_type.value,
-            tags=request.tags if request.tags else None,
-            visibility=request.visibility.value,
-            version=1,
-            created_at=datetime.now(timezone.utc),
-        )
+        now = datetime.now(timezone.utc).isoformat()
+        memories = await db.insert("memories", {
+            "context_id": context_id,
+            "agent_id": agent_id,
+            "conversation_id": request.conversation_id,
+            "content": request.content,
+            "memory_type": request.memory_type.value,
+            "tags": request.tags,
+            "visibility": request.visibility.value,
+            "version": 1,
+            "created_at": now,
+            "updated_at": now,
+        })
 
-        db.add(memory)
-        await db.commit()
-        await db.refresh(memory)
+        memory = memories[0] if memories else None
 
         # Create initial version
         try:
-            from src.gml.services.memory_versioning import get_versioning_service
-            versioning_service = await get_versioning_service()
-            version = await versioning_service.create_version(
-                memory=memory,
-                author_id=agent_id,
-                change_type="added",
-                db=db,
-            )
-            logger.debug(f"Created initial version {version.version_number} for memory {context_id}")
+            await db.insert("memory_versions", {
+                "context_id": context_id,
+                "version_number": 1,
+                "content": request.content,
+                "author_id": agent_id,
+                "change_type": "added",
+                "created_at": now,
+            })
+            logger.debug(f"Created initial version for memory {context_id}")
         except Exception as version_error:
-            logger.warning(
-                f"Failed to create initial version for memory {context_id}: {str(version_error)}"
-            )
-
-        # Record memory write cost
-        try:
-            await CostService.record_cost(
-                db=db,
-                cost_type="memory_write",
-                agent_id=agent_id,
-                amount=CostService.get_cost_for_operation("memory_write"),
-                request_id=f"memory-write-{context_id}",
-            )
-        except Exception as cost_error:
-            logger.warning(
-                f"Failed to record cost for memory write {context_id}: {str(cost_error)}"
-            )
+            logger.warning(f"Failed to create initial version: {str(version_error)}")
 
         logger.info(f"Memory written successfully: {context_id} by agent {agent_id}")
 
         return {
             "context_id": context_id,
-            "version": memory.version or 1,
+            "version": 1,
         }
 
     except HTTPException:
-        await db.rollback()
         raise
     except Exception as e:
-        await db.rollback()
         logger.error(f"Failed to write memory: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -374,47 +250,13 @@ async def write_memory(
     response_model=MemoryResponse,
     status_code=status.HTTP_200_OK,
     summary="Get memory by context ID",
-    description="Retrieve a memory by its context ID with access control",
 )
 async def get_memory(
     context_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: SupabaseDB = Depends(get_db),
     agent_id: Optional[str] = Depends(get_current_agent_id),
 ) -> MemoryResponse:
-    """
-    Get memory by context ID.
-
-    Retrieves memory content with access control checks.
-    Only returns memory if the requesting agent has permission to read it.
-
-    Args:
-        context_id: Unique memory context identifier
-        db: Database session (dependency injection)
-        agent_id: Current agent ID from headers
-
-    Returns:
-        MemoryResponse with memory details
-
-    Raises:
-        HTTPException 401: If agent_id not provided
-        HTTPException 403: If access denied
-        HTTPException 404: If memory not found
-        HTTPException 500: For server errors
-
-    Example:
-        GET /api/v1/memory/ctx-abc-123
-        Headers: X-Agent-ID: agent-001
-
-        Response 200:
-        {
-            "context_id": "ctx-abc-123",
-            "agent_id": "agent-001",
-            "memory_type": "semantic",
-            "created_at": "2024-01-15T10:30:00Z",
-            "version": 1,
-            "embedding_dimensions": 1536
-        }
-    """
+    """Get memory by context ID with access control."""
     try:
         # Validate agent_id
         if not agent_id:
@@ -424,23 +266,19 @@ async def get_memory(
             )
 
         # Get memory
-        result = await db.execute(
-            select(Memory).where(Memory.context_id == context_id)
-        )
-        memory = result.scalar_one_or_none()
-
-        if memory is None:
+        memories = await db.select("memories", filters={"context_id": context_id}, limit=1)
+        
+        if not memories:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Memory with context_id '{context_id}' not found",
             )
 
+        memory = memories[0]
+
         # Get agent for organization check
-        agent_result = await db.execute(
-            select(Agent).where(Agent.agent_id == agent_id)
-        )
-        agent = agent_result.scalar_one_or_none()
-        agent_organization = agent.organization if agent else None
+        agents = await db.select("agents", filters={"agent_id": agent_id}, limit=1)
+        agent_organization = agents[0].get("organization") if agents else None
 
         # Check access control
         if not check_memory_access(memory, agent_id, agent_organization):
@@ -450,23 +288,19 @@ async def get_memory(
             )
 
         # Build response
-        response = MemoryResponse(
-            context_id=memory.context_id,
-            agent_id=memory.agent_id,
-            memory_type=MemoryType(memory.memory_type) if memory.memory_type else None,
-            created_at=memory.created_at,
-            version=memory.version,
+        return MemoryResponse(
+            context_id=memory["context_id"],
+            agent_id=memory["agent_id"],
+            memory_type=MemoryType(memory["memory_type"]) if memory.get("memory_type") else None,
+            created_at=datetime.fromisoformat(memory["created_at"].replace("Z", "+00:00")) if memory.get("created_at") else None,
+            version=memory.get("version", 1),
             embedding_dimensions=DEFAULT_EMBEDDING_DIMENSION,
         )
-
-        return response
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(
-            f"Failed to get memory {context_id}: {str(e)}", exc_info=True
-        )
+        logger.error(f"Failed to get memory {context_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve memory. Please try again later.",
@@ -478,34 +312,14 @@ async def get_memory(
     response_model=dict,
     status_code=status.HTTP_200_OK,
     summary="Update memory",
-    description="Update an existing memory with automatic versioning",
 )
 async def update_memory(
     context_id: str,
     request: MemoryWriteRequest,
-    db: AsyncSession = Depends(get_db),
+    db: SupabaseDB = Depends(get_db),
     agent_id: Optional[str] = Depends(get_current_agent_id),
 ) -> dict:
-    """
-    Update an existing memory.
-
-    Updates memory content and automatically creates a new version.
-    Also updates the vector embedding in Qdrant if content changed.
-
-    Args:
-        context_id: Memory context ID to update
-        request: Updated memory content and metadata
-        db: Database session
-        agent_id: Current agent ID from headers
-
-    Returns:
-        Dictionary with updated memory info
-
-    Raises:
-        HTTPException 401: If agent_id not provided
-        HTTPException 404: If memory not found
-        HTTPException 500: For server errors
-    """
+    """Update an existing memory with automatic versioning."""
     try:
         # Validate agent_id
         if not agent_id:
@@ -515,35 +329,38 @@ async def update_memory(
             )
 
         # Get memory
-        result = await db.execute(
-            select(Memory).where(Memory.context_id == context_id)
-        )
-        memory = result.scalar_one_or_none()
-
-        if memory is None:
+        memories = await db.select("memories", filters={"context_id": context_id}, limit=1)
+        
+        if not memories:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Memory with context_id '{context_id}' not found",
             )
 
+        memory = memories[0]
+
         # Verify agent ownership
-        if memory.agent_id != agent_id:
+        if memory["agent_id"] != agent_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only update your own memories",
             )
 
-        # Update memory content
-        memory.content = request.content
+        # Update memory
+        now = datetime.now(timezone.utc).isoformat()
+        update_data = {
+            "content": request.content,
+            "updated_at": now,
+        }
+        
         if request.memory_type:
-            memory.memory_type = request.memory_type.value
+            update_data["memory_type"] = request.memory_type.value
         if request.tags:
-            memory.tags = request.tags
+            update_data["tags"] = request.tags
         if request.visibility:
-            memory.visibility = request.visibility.value
+            update_data["visibility"] = request.visibility.value
 
-        await db.commit()
-        await db.refresh(memory)
+        await db.update("memories", update_data, {"context_id": context_id})
 
         # Update embedding in Qdrant
         try:
@@ -556,25 +373,27 @@ async def update_memory(
                 embedding=embedding,
                 metadata={
                     "agent_id": agent_id,
-                    "memory_type": request.memory_type.value if request.memory_type else memory.memory_type,
-                    "conversation_id": request.conversation_id or memory.conversation_id,
+                    "memory_type": request.memory_type.value if request.memory_type else memory["memory_type"],
+                    "conversation_id": request.conversation_id or memory.get("conversation_id"),
                 },
             )
         except Exception as embed_error:
             logger.warning(f"Failed to update embedding: {str(embed_error)}")
 
-        # Create new version automatically
+        # Create new version
         try:
-            from src.gml.services.memory_versioning import get_versioning_service
-
-            versioning_service = await get_versioning_service()
-            version = await versioning_service.create_version(
-                memory=memory,
-                author_id=agent_id,
-                change_type="modified",
-                db=db,
-            )
-            logger.debug(f"Created version {version.version_number} for memory {context_id}")
+            # Get current version count
+            versions = await db.select("memory_versions", filters={"context_id": context_id})
+            version_num = len(versions) + 1
+            
+            await db.insert("memory_versions", {
+                "context_id": context_id,
+                "version_number": version_num,
+                "content": request.content,
+                "author_id": agent_id,
+                "change_type": "modified",
+                "created_at": now,
+            })
         except Exception as version_error:
             logger.warning(f"Failed to create version: {str(version_error)}")
 
@@ -587,10 +406,8 @@ async def update_memory(
         }
 
     except HTTPException:
-        await db.rollback()
         raise
     except Exception as e:
-        await db.rollback()
         logger.error(f"Failed to update memory: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -603,61 +420,13 @@ async def update_memory(
     response_model=dict,
     status_code=status.HTTP_200_OK,
     summary="Search memories semantically",
-    description="Perform semantic search on memories using vector embeddings",
 )
 async def search_memories(
     request: MemorySearchRequest,
-    db: AsyncSession = Depends(get_db),
+    db: SupabaseDB = Depends(get_db),
     agent_id: Optional[str] = Depends(get_current_agent_id),
 ) -> dict:
-    """
-    Search memories using semantic similarity.
-
-    Performs vector similarity search on memories with optional filtering
-    by memory type and conversation ID. Returns top-N results with similarity scores.
-
-    Also records the memory search cost.
-
-    Args:
-        request: Search request with query and filters
-        db: Database session (dependency injection)
-        agent_id: Current agent ID from headers
-
-    Returns:
-        Dictionary containing:
-            - query: The search query
-            - results: List of MemorySearchResult objects
-            - total: Total number of results found
-
-    Raises:
-        HTTPException 401: If agent_id not provided
-        HTTPException 500: For server errors
-
-    Example:
-        POST /api/v1/memory/search
-        Headers: X-Agent-ID: agent-001
-        {
-            "query": "user interface preferences",
-            "memory_type": "semantic",
-            "conversation_id": "conv-xyz-456",
-            "limit": 10
-        }
-
-        Response 200:
-        {
-            "query": "user interface preferences",
-            "results": [
-                {
-                    "context_id": "ctx-abc-123",
-                    "content": {"text": "User prefers dark mode"},
-                    "similarity_score": 0.92,
-                    "created_by": "agent-001",
-                    "created_at": "2024-01-15T10:30:00Z"
-                }
-            ],
-            "total": 1
-        }
-    """
+    """Search memories using semantic similarity."""
     try:
         # Validate agent_id
         if not agent_id:
@@ -680,67 +449,45 @@ async def search_memories(
             agent_id=agent_id,
         )
 
-        # For now, fallback to database search if semantic search returns empty
-        # This is a placeholder until vector search is implemented
+        # Fallback to database search if semantic search returns empty
         if not search_results:
-            logger.debug("Semantic search stub returned empty, using database fallback")
-            # Fallback: simple database query (not semantic)
-            query = select(Memory).where(Memory.agent_id == agent_id)
-
+            logger.debug("Semantic search returned empty, using database fallback")
+            
+            filters = {"agent_id": agent_id}
             if request.memory_type:
-                query = query.where(Memory.memory_type == request.memory_type.value)
-
+                filters["memory_type"] = request.memory_type.value
             if request.conversation_id:
-                query = query.where(Memory.conversation_id == request.conversation_id)
+                filters["conversation_id"] = request.conversation_id
 
-            query = query.limit(request.limit).order_by(Memory.created_at.desc())
+            memories = await db.select(
+                "memories",
+                filters=filters,
+                order="created_at desc",
+                limit=request.limit,
+            )
 
-            result = await db.execute(query)
-            memories = result.scalars().all()
-
-            # Convert to search results with placeholder similarity scores
-            search_results = [
-                (memory, 0.5) for memory in memories
-            ]  # Placeholder similarity score
+            search_results = [(memory, 0.5) for memory in memories]
 
         # Get agent for organization check
-        agent_result = await db.execute(
-            select(Agent).where(Agent.agent_id == agent_id)
-        )
-        agent = agent_result.scalar_one_or_none()
-        agent_organization = agent.organization if agent else None
+        agents = await db.select("agents", filters={"agent_id": agent_id}, limit=1)
+        agent_organization = agents[0].get("organization") if agents else None
 
-        # Filter results by access control and convert to response format
+        # Filter results by access control
         results = []
         for memory, similarity_score in search_results:
-            # Check access control
             if check_memory_access(memory, agent_id, agent_organization):
                 results.append(
                     MemorySearchResult(
-                        context_id=memory.context_id,
-                        content=memory.content or {},
+                        context_id=memory["context_id"],
+                        content=memory.get("content", {}),
                         similarity_score=similarity_score,
-                        created_by=memory.agent_id,
-                        created_at=memory.created_at,
+                        created_by=memory["agent_id"],
+                        created_at=datetime.fromisoformat(memory["created_at"].replace("Z", "+00:00")) if memory.get("created_at") else None,
                     )
                 )
 
         # Limit results
         results = results[: request.limit]
-
-        # Record memory search cost
-        try:
-            await CostService.record_cost(
-                db=db,
-                cost_type="memory_search",
-                agent_id=agent_id,
-                amount=CostService.get_cost_for_operation("memory_search"),
-                request_id=f"memory-search-{request.query[:50]}",
-            )
-        except Exception as cost_error:
-            logger.warning(
-                f"Failed to record cost for memory search: {str(cost_error)}"
-            )
 
         logger.info(
             f"Memory search completed: query='{request.query}', results={len(results)}"
@@ -761,3 +508,70 @@ async def search_memories(
             detail="Failed to search memories. Please try again later.",
         )
 
+
+@router.delete(
+    "/{context_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete memory",
+)
+async def delete_memory(
+    context_id: str,
+    db: SupabaseDB = Depends(get_db),
+    agent_id: Optional[str] = Depends(get_current_agent_id),
+) -> dict:
+    """Delete a memory by context ID."""
+    try:
+        # Validate agent_id
+        if not agent_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Agent ID required. Provide X-Agent-ID header.",
+            )
+
+        # Get memory
+        memories = await db.select("memories", filters={"context_id": context_id}, limit=1)
+        
+        if not memories:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Memory with context_id '{context_id}' not found",
+            )
+
+        memory = memories[0]
+
+        # Verify agent ownership
+        if memory["agent_id"] != agent_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete your own memories",
+            )
+
+        # Delete from Qdrant
+        try:
+            from src.gml.services.memory_store import get_memory_store
+            memory_store = await get_memory_store()
+            await memory_store.delete_memory(context_id)
+        except Exception as qdrant_error:
+            logger.warning(f"Failed to delete from Qdrant: {str(qdrant_error)}")
+
+        # Delete from database
+        await db.delete("memories", {"context_id": context_id})
+        await db.delete("memory_vectors", {"context_id": context_id})
+        await db.delete("memory_versions", {"context_id": context_id})
+
+        logger.info(f"Memory deleted successfully: {context_id} by agent {agent_id}")
+
+        return {
+            "context_id": context_id,
+            "success": True,
+            "message": "Memory deleted successfully",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete memory: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete memory. Please try again later.",
+        )

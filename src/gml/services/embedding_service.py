@@ -165,13 +165,13 @@ class EmbeddingService:
 
         try:
             redis_client = await get_redis_client()
-            cache_key = self._get_cache_key(text)
 
-            # Check if Redis is available
-            if not await redis_client.health_check():
+            # Check if Redis is available (returns None if not configured)
+            if redis_client is None or not await redis_client.health_check():
                 logger.debug("Redis not available, skipping cache")
                 return None
 
+            cache_key = self._get_cache_key(text)
             cached_data = await redis_client.redis.get(cache_key)
             if cached_data:
                 embedding = json.loads(cached_data)
@@ -196,13 +196,13 @@ class EmbeddingService:
 
         try:
             redis_client = await get_redis_client()
-            cache_key = self._get_cache_key(text)
 
-            # Check if Redis is available
-            if not await redis_client.health_check():
+            # Check if Redis is available (returns None if not configured)
+            if redis_client is None or not await redis_client.health_check():
                 logger.debug("Redis not available, skipping cache")
                 return
 
+            cache_key = self._get_cache_key(text)
             # Store embedding as JSON with TTL
             embedding_json = json.dumps(embedding)
             await redis_client.redis.setex(cache_key, CACHE_TTL, embedding_json)
@@ -677,7 +677,8 @@ class EmbeddingService:
         try:
             redis_client = await get_redis_client()
 
-            if not await redis_client.health_check():
+            # Check if Redis is available (returns None if not configured)
+            if redis_client is None or not await redis_client.health_check():
                 logger.warning("Redis not available, cannot clear cache")
                 return 0
 

@@ -78,12 +78,12 @@ REDIS_MESSAGE_CHANNEL = "gml:messages"
 REDIS_HEARTBEAT_CHANNEL = "gml:heartbeat"
 
 # ============================================================================
-# QDRANT CONSTANTS
+# PINECONE CONSTANTS
 # ============================================================================
 
-QDRANT_COLLECTION_NAME = "gml_memories"
-QDRANT_VECTOR_SIZE = EMBEDDING_DIMENSIONS
-QDRANT_DISTANCE_METRIC = "Cosine"
+PINECONE_INDEX_NAME = "gml-memories"
+PINECONE_VECTOR_SIZE = EMBEDDING_DIMENSIONS
+PINECONE_METRIC = "cosine"
 
 # ============================================================================
 # HEALTH CHECK CONSTANTS

@@ -1,406 +1,158 @@
 """
-Memory Versioning API Routes
+Memory Versions API Routes
 
-Provides endpoints for managing memory versions:
-- List version history
-- Get specific version
-- Revert to previous version
-- Generate diffs between versions
-
-Usage:
-    GET /api/v1/memories/{context_id}/versions
-    GET /api/v1/memories/{context_id}/versions/{version}
-    POST /api/v1/memories/{context_id}/versions/revert
-    GET /api/v1/memories/{context_id}/diff
+Provides memory versioning endpoints using Supabase.
 """
 
 import logging
-from typing import List, Optional
+from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
-from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from src.gml.db.database import get_db
-from src.gml.db.models import Memory
-from src.gml.services.memory_versioning import get_versioning_service
+from src.gml.api.dependencies import get_db
+from src.gml.services.supabase_client import SupabaseDB
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/memories/{context_id}/versions", tags=["memory-versions"])
-
-
-# ============================================================================
-# REQUEST/RESPONSE MODELS
-# ============================================================================
-
-
-class VersionResponse(BaseModel):
-    """Response model for a single version."""
-
-    id: int
-    context_id: str
-    version_number: int
-    change_type: str
-    author_id: Optional[str]
-    semantic_summary: Optional[str]
-    parent_version_id: Optional[int]
-    is_archived: bool
-    compressed: bool
-    created_at: str
-
-    class Config:
-        from_attributes = True
-
-
-class VersionHistoryResponse(BaseModel):
-    """Response model for version history."""
-
-    context_id: str
-    versions: List[VersionResponse]
-    total: int
-    limit: int
-    offset: int
-
-
-class RevertRequest(BaseModel):
-    """Request model for reverting to a version."""
-
-    version_number: int = Field(..., description="Version number to revert to")
-    author_id: Optional[str] = Field(None, description="ID of user/agent performing revert")
-
-
-class DiffResponse(BaseModel):
-    """Response model for version diff."""
-
-    context_id: str
-    version1: int
-    version2: Optional[int]
-    unified_diff: str
-    side_by_side: List[str]
-    statistics: dict
-
-
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
-
-
-async def get_current_agent_id(
-    x_agent_id: Optional[str] = Header(None, alias="X-Agent-ID"),
-) -> Optional[str]:
-    """Get current agent ID from request headers."""
-    return x_agent_id
-
-
-# ============================================================================
-# VERSIONING ENDPOINTS
-# ============================================================================
+router = APIRouter(prefix="/memory-versions", tags=["memory-versions"])
 
 
 @router.get(
-    "",
-    response_model=VersionHistoryResponse,
+    "/{context_id}",
+    response_model=dict,
     status_code=status.HTTP_200_OK,
-    summary="List memory versions",
-    description="Get version history for a memory with pagination",
+    summary="Get memory versions",
 )
-async def list_versions(
+async def get_memory_versions(
     context_id: str,
-    limit: int = Query(50, ge=1, le=100, description="Maximum number of versions to return"),
-    offset: int = Query(0, ge=0, description="Offset for pagination"),
-    db: AsyncSession = Depends(get_db),
-    agent_id: Optional[str] = Depends(get_current_agent_id),
-) -> VersionHistoryResponse:
-    """
-    List all versions of a memory.
-
-    Returns version history sorted by version number (newest first).
-
-    Args:
-        context_id: Memory context ID
-        limit: Maximum number of versions to return
-        offset: Offset for pagination
-        db: Database session
-        agent_id: Current agent ID
-
-    Returns:
-        VersionHistoryResponse with list of versions
-
-    Raises:
-        HTTPException 404: If memory not found
-        HTTPException 500: For server errors
-    """
+    limit: int = Query(50, ge=1, le=100),
+    db: SupabaseDB = Depends(get_db),
+) -> dict:
+    """Get all versions of a memory."""
     try:
-        # Verify memory exists
-        result = await db.execute(
-            select(Memory).where(Memory.context_id == context_id)
+        versions = await db.select(
+            "memory_versions",
+            filters={"context_id": context_id},
+            order="version_number desc",
+            limit=limit,
         )
-        memory = result.scalar_one_or_none()
 
-        if not memory:
+        if not versions:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Memory with context_id '{context_id}' not found",
+                detail=f"No versions found for memory '{context_id}'",
             )
 
-        # Get version history
-        versioning_service = await get_versioning_service()
-        versions = await versioning_service.get_version_history(
-            context_id=context_id,
-            limit=limit,
-            offset=offset,
-            db=db,
-        )
-
-        return VersionHistoryResponse(
-            context_id=context_id,
-            versions=[VersionResponse.model_validate(v) for v in versions],
-            total=len(versions),
-            limit=limit,
-            offset=offset,
-        )
+        return {
+            "context_id": context_id,
+            "versions": versions,
+            "total": len(versions),
+        }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error listing versions: {str(e)}", exc_info=True)
+        logger.error(f"Failed to get memory versions: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list versions: {str(e)}",
+            detail="Failed to get memory versions",
         )
 
 
 @router.get(
-    "/{version_number}",
-    response_model=VersionResponse,
+    "/{context_id}/{version_number}",
+    response_model=dict,
     status_code=status.HTTP_200_OK,
-    summary="Get specific version",
-    description="Retrieve a specific version of a memory",
+    summary="Get specific memory version",
 )
-async def get_version(
+async def get_memory_version(
     context_id: str,
     version_number: int,
-    db: AsyncSession = Depends(get_db),
-    agent_id: Optional[str] = Depends(get_current_agent_id),
-) -> VersionResponse:
-    """
-    Get a specific version of a memory.
-
-    Args:
-        context_id: Memory context ID
-        version_number: Version number to retrieve
-        db: Database session
-        agent_id: Current agent ID
-
-    Returns:
-        VersionResponse with version details
-
-    Raises:
-        HTTPException 404: If memory or version not found
-        HTTPException 500: For server errors
-    """
+    db: SupabaseDB = Depends(get_db),
+) -> dict:
+    """Get a specific version of a memory."""
     try:
-        # Verify memory exists
-        result = await db.execute(
-            select(Memory).where(Memory.context_id == context_id)
-        )
-        memory = result.scalar_one_or_none()
-
-        if not memory:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Memory with context_id '{context_id}' not found",
-            )
-
-        # Get version
-        versioning_service = await get_versioning_service()
-        version = await versioning_service.get_version(
-            context_id=context_id,
-            version_number=version_number,
-            db=db,
+        versions = await db.select(
+            "memory_versions",
+            filters={
+                "context_id": context_id,
+                "version_number": version_number,
+            },
+            limit=1,
         )
 
-        if not version:
+        if not versions:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Version {version_number} not found for memory '{context_id}'",
             )
 
-        return VersionResponse.model_validate(version)
+        return versions[0]
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting version: {str(e)}", exc_info=True)
+        logger.error(f"Failed to get memory version: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get version: {str(e)}",
+            detail="Failed to get memory version",
         )
 
 
 @router.post(
-    "/revert",
+    "/{context_id}/rollback/{version_number}",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    summary="Revert to version",
-    description="Revert memory to a previous version",
+    summary="Rollback to version",
 )
-async def revert_to_version(
+async def rollback_memory(
     context_id: str,
-    request: RevertRequest,
-    db: AsyncSession = Depends(get_db),
-    agent_id: Optional[str] = Depends(get_current_agent_id),
+    version_number: int,
+    db: SupabaseDB = Depends(get_db),
 ) -> dict:
-    """
-    Revert memory to a previous version.
-
-    Creates a new version with content from the specified version.
-
-    Args:
-        context_id: Memory context ID
-        request: Revert request with version number
-        db: Database session
-        agent_id: Current agent ID
-
-    Returns:
-        Dictionary with success message and updated memory info
-
-    Raises:
-        HTTPException 404: If memory or version not found
-        HTTPException 500: For server errors
-    """
+    """Rollback memory to a specific version."""
     try:
-        if not agent_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Agent ID required. Provide X-Agent-ID header.",
-            )
-
-        # Verify memory exists
-        result = await db.execute(
-            select(Memory).where(Memory.context_id == context_id)
+        # Get the version to rollback to
+        versions = await db.select(
+            "memory_versions",
+            filters={
+                "context_id": context_id,
+                "version_number": version_number,
+            },
+            limit=1,
         )
-        memory = result.scalar_one_or_none()
 
-        if not memory:
+        if not versions:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Memory with context_id '{context_id}' not found",
+                detail=f"Version {version_number} not found",
             )
 
-        # Revert to version
-        versioning_service = await get_versioning_service()
-        updated_memory = await versioning_service.revert_to_version(
-            context_id=context_id,
-            version_number=request.version_number,
-            author_id=request.author_id or agent_id,
-            db=db,
-        )
+        version = versions[0]
 
-        logger.info(
-            f"Memory {context_id} reverted to version {request.version_number} by {agent_id}"
-        )
+        # Update memory with version content
+        await db.update("memories", {
+            "content": version["content"],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }, {"context_id": context_id})
+
+        logger.info(f"Rolled back memory {context_id} to version {version_number}")
 
         return {
-            "success": True,
-            "message": f"Memory reverted to version {request.version_number}",
             "context_id": context_id,
-            "version_number": request.version_number,
+            "rolled_back_to": version_number,
+            "success": True,
         }
 
     except HTTPException:
         raise
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
     except Exception as e:
-        await db.rollback()
-        logger.error(f"Error reverting to version: {str(e)}", exc_info=True)
+        logger.error(f"Failed to rollback memory: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to revert to version: {str(e)}",
-        )
-
-
-@router.get(
-    "/diff",
-    response_model=DiffResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get version diff",
-    description="Generate diff between two versions of a memory",
-)
-async def get_version_diff(
-    context_id: str,
-    version1: int = Query(..., description="First version number"),
-    version2: Optional[int] = Query(None, description="Second version number (None = current)"),
-    db: AsyncSession = Depends(get_db),
-    agent_id: Optional[str] = Depends(get_current_agent_id),
-) -> DiffResponse:
-    """
-    Get diff between two versions of a memory.
-
-    Args:
-        context_id: Memory context ID
-        version1: First version number
-        version2: Second version number (None = compare with current)
-        db: Database session
-        agent_id: Current agent ID
-
-    Returns:
-        DiffResponse with diff information
-
-    Raises:
-        HTTPException 404: If memory or version not found
-        HTTPException 500: For server errors
-    """
-    try:
-        # Verify memory exists
-        result = await db.execute(
-            select(Memory).where(Memory.context_id == context_id)
-        )
-        memory = result.scalar_one_or_none()
-
-        if not memory:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Memory with context_id '{context_id}' not found",
-            )
-
-        # Generate diff
-        versioning_service = await get_versioning_service()
-        diff = await versioning_service.generate_diff(
-            context_id=context_id,
-            version1=version1,
-            version2=version2,
-            db=db,
-        )
-
-        return DiffResponse(
-            context_id=diff["context_id"],
-            version1=diff["version1"],
-            version2=diff["version2"],
-            unified_diff=diff["unified_diff"],
-            side_by_side=diff["side_by_side"],
-            statistics=diff["statistics"],
-        )
-
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
-    except Exception as e:
-        logger.error(f"Error generating diff: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate diff: {str(e)}",
+            detail="Failed to rollback memory",
         )
 
 
 __all__ = ["router"]
-

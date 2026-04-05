@@ -27,11 +27,15 @@ def setup_middleware(app) -> None:
         app: FastAPI application instance
     """
     from fastapi.middleware.cors import CORSMiddleware
+    from src.gml.core.config import get_settings
+
+    settings = get_settings()
 
     # CORS middleware (first, so it wraps everything)
+    # In production, set CORS_ORIGINS to your Vercel frontend URL
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.cors_origins_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

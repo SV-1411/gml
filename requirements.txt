@@ -1,5 +1,5 @@
 # GML Infrastructure - Production Dependencies
-# Optimized for Python 3.11+ on M4 Mac
+# Simplified for Vercel + Render + Supabase + Pinecone
 
 # Web Framework
 fastapi==0.115.4
@@ -9,21 +9,22 @@ uvicorn[standard]==0.32.1
 pydantic==2.9.2
 pydantic-settings==2.5.0
 
-# Database - Async ORM & PostgreSQL Driver
-sqlalchemy>=2.0.40  # 2.0.27 incompatible with Python 3.13, using >=2.0.40
-asyncpg==0.30.0
+# Database - SQLAlchemy (ONLY for Alembic migrations)
+# Primary database access is via Supabase client
+sqlalchemy>=2.0.40  # Required for Alembic migrations only
+asyncpg==0.30.0  # Required for Alembic migrations only
 
-# Database migrations
+# Supabase Client (PRIMARY database access)
+supabase==2.7.4
+
+# Database migrations (uses SQLAlchemy)
 alembic==1.16.5
 
-# Vector Database
-qdrant-client==1.12.0
+# Vector Database - Pinecone (managed, no infrastructure)
+pinecone-client==5.0.0
 
-# Caching - Redis
+# Caching - Redis (optional)
 redis==5.2.0
-# Note: aioredis 2.0.1 has Python 3.13 compatibility issues
-# Using redis[asyncio] instead for async support
-redis[asyncio]==5.2.0
 
 # HTTP Client
 httpx==0.27.0
@@ -32,9 +33,6 @@ httpx==0.27.0
 cryptography==43.0.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-
-# Monitoring & Metrics
-prometheus-client==0.21.0
 
 # Configuration & Environment
 python-dotenv==1.0.1
@@ -46,9 +44,6 @@ pytz==2024.1
 
 # AI/ML Services
 openai>=1.0.0
-
-# Object Storage
-minio>=7.2.0
 
 # Form Data Support (Required for file uploads)
 python-multipart>=0.0.6

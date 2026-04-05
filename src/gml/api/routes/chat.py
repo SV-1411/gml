@@ -1,31 +1,19 @@
 """
 Chat API Routes
 
-Provides chat functionality with automatic memory injection:
-- POST /api/v1/chat/message - Send chat message with memory context
-- GET /api/v1/chat/conversations/{id}/history - Get conversation history
-- POST /api/v1/chat/conversations/{id}/summary - Generate conversation summary
-
-Usage:
-    POST /api/v1/chat/message
-    {
-        "agent_id": "agent-123",
-        "conversation_id": "conv-456",
-        "message": "Hello, what do you remember about me?"
-    }
+Provides chat functionality with automatic memory injection using Supabase.
 """
 
 import logging
 import time
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.gml.db.database import get_db
-from src.gml.db.models import Agent
+from src.gml.api.dependencies import get_db
+from src.gml.services.supabase_client import SupabaseDB
 from src.gml.services.chat_memory_injection import get_memory_injector
 from src.gml.services.conversation_tracker import get_conversation_tracker
 from src.gml.services.llm_service import get_llm_service
@@ -43,18 +31,16 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 class ChatMessageRequest(BaseModel):
     """Request model for chat message."""
-
     agent_id: str = Field(..., description="Agent ID")
-    conversation_id: Optional[str] = Field(None, description="Conversation ID (auto-generated if not provided)")
+    conversation_id: Optional[str] = Field(None, description="Conversation ID")
     message: str = Field(..., min_length=1, description="User message")
     stream: bool = Field(False, description="Stream response")
-    relevance_threshold: float = Field(0.7, ge=0.0, le=1.0, description="Memory relevance threshold")
-    max_memories: int = Field(10, ge=1, le=50, description="Maximum memories to include")
+    relevance_threshold: float = Field(0.7, ge=0.0, le=1.0)
+    max_memories: int = Field(10, ge=1, le=50)
 
 
 class ChatMessageResponse(BaseModel):
     """Response model for chat message."""
-
     message: str
     response: str
     used_memories: list[str]
@@ -85,31 +71,13 @@ async def get_current_agent_id(
     response_model=ChatMessageResponse,
     status_code=status.HTTP_200_OK,
     summary="Send chat message",
-    description="Send a chat message with automatic memory injection",
 )
 async def send_chat_message(
     request: ChatMessageRequest,
-    db: AsyncSession = Depends(get_db),
+    db: SupabaseDB = Depends(get_db),
     agent_id: Optional[str] = Depends(get_current_agent_id),
 ) -> ChatMessageResponse:
-    """
-    Send chat message with automatic memory injection.
-
-    Automatically loads relevant memories, builds prompt, calls LLM,
-    and tracks conversation.
-
-    Args:
-        request: Chat message request
-        db: Database session
-        agent_id: Current agent ID from headers
-
-    Returns:
-        ChatMessageResponse with response and metadata
-
-    Raises:
-        HTTPException 404: If agent not found
-        HTTPException 500: For server errors
-    """
+    """Send chat message with automatic memory injection."""
     start_time = time.time()
 
     try:
@@ -122,20 +90,15 @@ async def send_chat_message(
             )
 
         # Verify agent exists
-        from sqlalchemy import select
-        result = await db.execute(
-            select(Agent).where(Agent.agent_id == effective_agent_id)
-        )
-        agent = result.scalar_one_or_none()
-
-        if agent is None:
+        agents = await db.select("agents", filters={"agent_id": effective_agent_id}, limit=1)
+        
+        if not agents:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Agent '{effective_agent_id}' not found",
             )
 
         # Generate conversation_id if not provided
-        import uuid
         conversation_id = request.conversation_id or f"conv-{uuid.uuid4().hex[:12]}"
 
         # Get services
@@ -171,24 +134,23 @@ async def send_chat_message(
             {"role": "user", "content": request.message},
         ]
 
-        # Get conversation history (optional: include recent history)
+        # Get conversation history
         history = await conversation_tracker.get_conversation_history(
             conversation_id=conversation_id,
             limit=5,
             db=db,
         )
 
-        # Add recent history (excluding current message)
+        # Add recent history
         for msg in history[-5:-1] if len(history) > 1 else []:
-            if msg.role in ["user", "assistant"]:
-                messages.insert(-1, {"role": msg.role, "content": msg.content})
+            if msg.get("role") in ["user", "assistant"]:
+                messages.insert(-1, {"role": msg["role"], "content": msg["content"]})
 
         # Call LLM
         if request.stream:
-            # Streaming response handled separately
             raise HTTPException(
                 status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail="Streaming not yet implemented in this endpoint",
+                detail="Streaming not yet implemented",
             )
 
         llm_response = await llm_service.chat_completion(
@@ -222,8 +184,8 @@ async def send_chat_message(
             db=db,
         )
 
-        # Create memories from extracted content if any
-        for memory_text in processed["extracted_memories"][:3]:  # Limit to 3
+        # Create memories from extracted content
+        for memory_text in processed["extracted_memories"][:3]:
             try:
                 await conversation_tracker.create_memory_from_chat(
                     conversation_id=conversation_id,
@@ -265,24 +227,13 @@ async def send_chat_message(
     response_model=dict,
     status_code=status.HTTP_200_OK,
     summary="Get conversation history",
-    description="Retrieve conversation message history",
 )
 async def get_conversation_history(
     conversation_id: str,
-    limit: int = Query(50, ge=1, le=100, description="Maximum number of messages"),
-    db: AsyncSession = Depends(get_db),
+    limit: int = Query(50, ge=1, le=100),
+    db: SupabaseDB = Depends(get_db),
 ) -> dict:
-    """
-    Get conversation history.
-
-    Args:
-        conversation_id: Conversation ID
-        limit: Maximum number of messages
-        db: Database session
-
-    Returns:
-        Dictionary with conversation history
-    """
+    """Get conversation history."""
     try:
         conversation_tracker = await get_conversation_tracker()
         messages = await conversation_tracker.get_conversation_history(
@@ -295,11 +246,11 @@ async def get_conversation_history(
             "conversation_id": conversation_id,
             "messages": [
                 {
-                    "id": msg.id,
-                    "role": msg.role,
-                    "content": msg.content,
-                    "created_at": msg.created_at.isoformat(),
-                    "used_memories": msg.used_memories or [],
+                    "id": msg["id"],
+                    "role": msg["role"],
+                    "content": msg["content"],
+                    "created_at": msg["created_at"],
+                    "used_memories": msg.get("used_memories", []),
                 }
                 for msg in messages
             ],
@@ -319,22 +270,12 @@ async def get_conversation_history(
     response_model=dict,
     status_code=status.HTTP_200_OK,
     summary="Generate conversation summary",
-    description="Generate a summary of the conversation",
 )
 async def generate_conversation_summary(
     conversation_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: SupabaseDB = Depends(get_db),
 ) -> dict:
-    """
-    Generate conversation summary.
-
-    Args:
-        conversation_id: Conversation ID
-        db: Database session
-
-    Returns:
-        Dictionary with summary
-    """
+    """Generate conversation summary."""
     try:
         conversation_tracker = await get_conversation_tracker()
         summary = await conversation_tracker.generate_summary(
@@ -356,4 +297,3 @@ async def generate_conversation_summary(
 
 
 __all__ = ["router"]
-

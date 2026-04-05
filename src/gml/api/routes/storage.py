@@ -1,164 +1,150 @@
 """
 Storage API Routes
 
-FastAPI router for file upload and storage management endpoints.
+Provides file storage endpoints using Supabase Storage.
 """
 
 import logging
-import uuid
-from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 
-from src.gml.db.database import get_db
-from src.gml.monitoring.metrics import metrics
+from src.gml.api.dependencies import get_db
+from src.gml.services.supabase_client import SupabaseDB, get_supabase_client
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 
-# Try to import MinIO service, fallback to placeholder if not available
-MINIO_ENABLED = False
-try:
-    from src.gml.services.minio_service import get_minio_service
-    MINIO_ENABLED = True
-except (ImportError, AttributeError, Exception) as e:
-    MINIO_ENABLED = False
-    logger.info(f"MinIO service not available: {e}. File uploads will use placeholder URLs.")
-
 
 @router.post(
     "/upload",
+    response_model=dict,
     status_code=status.HTTP_201_CREATED,
-    summary="Upload a file",
-    description="Upload a file to storage and return the storage URL",
+    summary="Upload file",
 )
 async def upload_file(
     file: UploadFile = File(...),
-    bucket: str = Form("uploads"),
-    db: AsyncSession = Depends(get_db),
+    bucket: str = Query("uploads", description="Storage bucket name"),
+    db: SupabaseDB = Depends(get_db),
 ) -> dict:
-    """
-    Upload a file to storage.
-
-    Currently returns a placeholder URL. In production, this should:
-    1. Upload to MinIO/S3
-    2. Generate presigned URL or public URL
-    3. Store metadata in database
-    4. Return storage URL
-
-    Args:
-        file: The file to upload
-        bucket: Storage bucket name (default: uploads)
-        db: Database session
-
-    Returns:
-        Dictionary containing:
-            - url: Storage URL for the file
-            - key: File key/path in storage
-            - bucket: Bucket name
-            - size: File size in bytes
-
-    Example:
-        POST /api/v1/storage/upload
-        Form data:
-            - file: [binary file data]
-            - bucket: uploads
-
-        Response 201:
-        {
-            "url": "http://localhost:9000/uploads/file-abc-123.pdf",
-            "key": "file-abc-123.pdf",
-            "bucket": "uploads",
-            "size": 1024
-        }
-    """
+    """Upload a file to Supabase Storage."""
     try:
+        client = await get_supabase_client()
+        
         # Read file content
-        contents = await file.read()
-        file_size = len(contents)
-
-        # Generate unique file key
-        file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
-        file_key = f"{uuid.uuid4().hex[:12]}-{file.filename}" if file.filename else f"{uuid.uuid4().hex[:12]}.{file_extension}"
-
-        # Upload to MinIO if available
-        if MINIO_ENABLED:
-            try:
-                minio_service = get_minio_service()
-                storage_url = minio_service.upload_file(
-                    bucket_name=bucket,
-                    object_name=file_key,
-                    file_data=contents,
-                    content_type=file.content_type or "application/octet-stream",
-                    length=file_size,
-                )
-                logger.info(f"File uploaded to MinIO: {file_key} ({file_size} bytes) to bucket {bucket}")
-            except Exception as e:
-                logger.error(f"Failed to upload to MinIO: {e}. Using placeholder URL.")
-                storage_url = f"http://localhost:9000/{bucket}/{file_key}"
-        else:
-            # Placeholder URL if MinIO not available
-            storage_url = f"http://localhost:9000/{bucket}/{file_key}"
-            logger.info(f"File upload (placeholder): {file_key} ({file_size} bytes) to bucket {bucket}")
-
-        # Note: Request metrics are tracked by middleware
-        # No need to manually increment here
-
+        content = await file.read()
+        
+        # Upload to Supabase Storage
+        path = f"{file.filename}"
+        result = await client.storage.from_(bucket).upload(path, content)
+        
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]["message"],
+            )
+        
+        # Get public URL
+        public_url = client.storage.from_(bucket).get_public_url(path)
+        
+        logger.info(f"File uploaded: {file.filename} to {bucket}")
+        
         return {
-            "url": storage_url,
-            "key": file_key,
-            "bucket": bucket,
-            "size": file_size,
             "filename": file.filename,
-            "content_type": file.content_type,
+            "bucket": bucket,
+            "path": path,
+            "url": public_url,
+            "success": True,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to upload file: {str(e)}", exc_info=True)
+        logger.error(f"Failed to upload file: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload file: {str(e)}",
+            detail="Failed to upload file",
         )
 
 
 @router.get(
-    "/url/{key}",
+    "/list",
+    response_model=dict,
     status_code=status.HTTP_200_OK,
-    summary="Get file URL",
-    description="Get the storage URL for a file by its key",
+    summary="List files",
 )
-async def get_file_url(
-    key: str,
-    bucket: str = "uploads",
+async def list_files(
+    bucket: str = Query("uploads"),
+    prefix: Optional[str] = Query(None),
+    db: SupabaseDB = Depends(get_db),
 ) -> dict:
-    """
-    Get storage URL for a file.
-
-    Args:
-        key: File key/path
-        bucket: Bucket name (default: uploads)
-
-    Returns:
-        Dictionary containing storage URL
-
-    Example:
-        GET /api/v1/storage/url/file-abc-123.pdf?bucket=uploads
-
-        Response 200:
-        {
-            "url": "http://localhost:9000/uploads/file-abc-123.pdf",
-            "key": "file-abc-123.pdf",
-            "bucket": "uploads"
+    """List files in storage bucket."""
+    try:
+        client = await get_supabase_client()
+        
+        result = await client.storage.from_(bucket).list(prefix or "")
+        
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]["message"],
+            )
+        
+        return {
+            "bucket": bucket,
+            "files": result,
+            "total": len(result),
         }
-    """
-    storage_url = f"http://localhost:9000/{bucket}/{key}"
 
-    return {
-        "url": storage_url,
-        "key": key,
-        "bucket": bucket,
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to list files: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list files",
+        )
 
+
+@router.delete(
+    "/delete",
+    status_code=status.HTTP_200_OK,
+    summary="Delete file",
+)
+async def delete_file(
+    path: str = Query(..., description="File path in bucket"),
+    bucket: str = Query("uploads"),
+    db: SupabaseDB = Depends(get_db),
+) -> dict:
+    """Delete a file from storage."""
+    try:
+        client = await get_supabase_client()
+        
+        result = await client.storage.from_(bucket).remove([path])
+        
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]["message"],
+            )
+        
+        logger.info(f"File deleted: {path} from {bucket}")
+        
+        return {
+            "path": path,
+            "bucket": bucket,
+            "success": True,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete file: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete file",
+        )
+
+
+__all__ = ["router"]

@@ -77,14 +77,42 @@ class Settings(BaseSettings):
         description="Redis cache connection URL",
     )
 
-    QDRANT_URL: str = Field(
-        default="http://localhost:6333",
-        description="Qdrant vector database HTTP endpoint",
+    # ============================================================================
+    # PINECONE VECTOR DATABASE
+    # ============================================================================
+
+    PINECONE_API_KEY: str = Field(
+        default="",
+        description="Pinecone API key for vector database",
     )
 
-    QDRANT_API_KEY: str | None = Field(
-        default=None,
-        description="Qdrant API key (optional for local development)",
+    PINECONE_ENVIRONMENT: str = Field(
+        default="us-east-1",
+        description="Pinecone environment/region",
+    )
+
+    PINECONE_INDEX_NAME: str = Field(
+        default="gml-memories",
+        description="Pinecone index name for memory vectors",
+    )
+
+    # ============================================================================
+    # SUPABASE CONFIGURATION (for future REST API usage)
+    # ============================================================================
+
+    SUPABASE_URL: str = Field(
+        default="",
+        description="Supabase project URL (for REST API)",
+    )
+
+    SUPABASE_ANON_KEY: str = Field(
+        default="",
+        description="Supabase anonymous key (public, for client-side)",
+    )
+
+    SUPABASE_SERVICE_KEY: str = Field(
+        default="",
+        description="Supabase service role key (secret, for server-side)",
     )
 
     # ============================================================================
@@ -95,6 +123,17 @@ class Settings(BaseSettings):
         default="dev-secret-key-change-in-production",
         description="Secret key for cryptographic operations",
     )
+
+    # CORS Configuration for production
+    CORS_ORIGINS: str = Field(
+        default="http://localhost:3000,http://localhost:5173",
+        description="Comma-separated list of allowed CORS origins (set to Vercel URL in production)",
+    )
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse CORS_ORIGINS into a list."""
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     ALGORITHM: str = Field(
         default="HS256",
