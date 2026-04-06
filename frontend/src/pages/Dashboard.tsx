@@ -58,7 +58,7 @@ const Dashboard = () => {
       }
 
       // Load all agents
-      const agentsResponse = await agentsApi.getAll({ limit: 1000 })
+      const agentsResponse = await agentsApi.getAll({ limit: 100 })
       const allAgents: Agent[] = agentsResponse.agents || []
       setAgents(allAgents)
 
